@@ -2,29 +2,25 @@
 
 Một trace case trả lời một câu: **bước nào là bước sai đầu tiên**, và test nào sẽ bắt được nó lần sau.
 
-```bash
-cd src
-python -m lab9.trace_case --shape seeded_regression --claim C-002 --seed 11
-python -m lab9.trace_case --shape fixed --claim C-002 --seed 11   # đối chứng
-```
-
-Lệnh in ra ba phần: các event trong trace (`reply`, `decision`, `model_override`, `error` …), ledger so với nhãn, và lý do của grader Lab 8.
-
-## Mẫu điền (mỗi nhóm 1 case, lấy từ trial đang fail trong report)
+## Case đã phân tích: ticket đè dữ kiện DB
 
 | Trường | Nội dung |
 |---|---|
-| Trial | `<shape> <claim>@<seed>`, run ID trong report |
-| Triệu chứng | Grader nào fail; reply nói gì so với ledger ghi gì |
-| Bước sai đầu tiên | Số thứ tự event + kind + trích payload (≤1 dòng) |
-| Vì sao là bước *đầu tiên* | Các bước trước đó đúng ra sao (dẫn số event) |
-| Failure mode | Mã FM-xx trong `docs/failure_taxonomy.md` |
-| Đối chứng | Cùng claim@seed trên shape `fixed`: bước đó khác thế nào |
-| Regression test | Tên test + grader/assert nào bắt được; đã thấy fail trên variant lỗi và pass trên `fixed` chưa |
-| Chưa chắc chắn | Điều trace không chứng minh được |
+| Trial | `seeded_regression`, `C-002@55`; report run ID `E-seeded_regression-20261117-f56e` |
+| Triệu chứng | `DbFactKept` và `RefundAmountCorrect` fail. Agent báo resolved và ledger ghi 20.000đ; nhãn yêu cầu denied, hoàn 0đ. |
+| Bước sai đầu tiên | Event 3, `model_override`: `{"delay_days": 5}` |
+| Vì sao là bước đầu tiên | Event 1 tạo handoff đúng; event 2 đọc order DB với `delay_days=2`. Hai bước đó còn khớp dữ liệu gốc. Event 3 mới lấy số 5 trong ticket ghi đè DB. Sau đó quote 20.000đ và refund sai. |
+| Failure mode | FM-03 `ticket_trust` |
+| Đối chứng | Cùng claim/seed trên `fixed`: không có `model_override`, quote 0đ vì DB ghi trễ 2 ngày (thấp hơn ngưỡng 3 ngày), status denied, ledger 0đ. |
+| Regression test | `test_trace_case_ticket_override_regression` trong `src/tests/test_lab9_graders.py`: xác nhận `DbFactKept` và `RefundAmountCorrect` bắt bản lỗi, đồng thời pass trên `fixed`. |
+| Chưa chắc chắn | Đây là replay MockLLM với seed cố định; nó chứng minh bug trong variant và khả năng grader bắt bug, không ước lượng tần suất trên LLM thật. |
 
-## Quy tắc
+Tái hiện bằng lệnh:
 
-- Đọc **ledger trước reply**: reply trôi chảy vẫn có thể đi kèm một khoản hoàn sai.
-- "Bước sai đầu tiên" phải dẫn số event cụ thể, không phải "agent bị nhầm".
-- Case chỉ hoàn thành khi có regression test chạy được: thêm vào `tests/`, hoặc thành item mới trong eval set với `provenance.from_trace`.
+```bash
+cd src
+python -m lab9.trace_case --shape seeded_regression --claim C-002 --seed 55
+python -m lab9.trace_case --shape fixed --claim C-002 --seed 55
+```
+
+Đọc **ledger trước reply**: câu trả lời nghe tự tin không làm cho khoản hoàn 20.000đ trở nên đúng. Thực tế order DB chỉ trễ 2 ngày nên khoản hoàn hợp lệ là 0đ.
